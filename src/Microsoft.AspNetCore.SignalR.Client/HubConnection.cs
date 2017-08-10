@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Channels;
+using Microsoft.AspNetCore.SignalR.Client.Internal;
 using Microsoft.AspNetCore.SignalR.Internal;
 using Microsoft.AspNetCore.SignalR.Internal.Encoders;
 using Microsoft.AspNetCore.SignalR.Internal.Protocol;
@@ -158,11 +159,11 @@ namespace Microsoft.AspNetCore.SignalR.Client
             ThrowIfConnectionTerminated();
             if (nonBlocking)
             {
-                _logger.LogTrace("Preparing invocation of '{target}' and {argumentCount} args", methodName, irq.ResultType.AssemblyQualifiedName, args.Length);
+                _logger.PreparingNonBlockingInvocation(methodName, args.Length);
             }
             else
             {
-                _logger.LogTrace("Preparing invocation of '{target}', with return type '{returnType}' and {argumentCount} args", methodName, irq.ResultType.AssemblyQualifiedName, args.Length);
+                _logger.PreparingBlockingInvocation(methodName, irq.ResultType.AssemblyQualifiedName, args.Length);
             }
 
             // Create an invocation descriptor. Client invocations are always blocking
@@ -172,17 +173,13 @@ namespace Microsoft.AspNetCore.SignalR.Client
             if (!nonBlocking)
             {
                 // I just want an excuse to use 'irq' as a variable name...
-                _logger.LogDebug("Registering Invocation ID '{invocationId}' for tracking", invocationMessage.InvocationId);
+                _logger.RegisterInvocation(invocationMessage.InvocationId);
 
                 AddInvocation(irq);
             }
 
-            // Trace the full invocation, but only if that logging level is enabled (because building the args list is a bit slow)
-            if (_logger.IsEnabled(LogLevel.Trace))
-            {
-                var argsList = string.Join(", ", args.Select(a => a.GetType().FullName));
-                _logger.LogTrace("Issuing Invocation '{invocationId}': {returnType} {methodName}({args})", invocationMessage.InvocationId, irq.ResultType.FullName, methodName, argsList);
-            }
+            // Trace the full invocation
+            _logger.IssueInvocation(invocationMessage.InvocationId, irq.ResultType.FullName, methodName, args);
 
             // We don't need to wait for this to complete. It will signal back to the invocation request.
             return SendInvocation(invocationMessage, irq);
@@ -193,14 +190,14 @@ namespace Microsoft.AspNetCore.SignalR.Client
             try
             {
                 var payload = _protocolReaderWriter.WriteMessage(invocationMessage);
-                _logger.LogInformation("Sending Invocation '{invocationId}'", invocationMessage.InvocationId);
+                _logger.SendInvocation(invocationMessage.InvocationId);
 
                 await _connection.SendAsync(payload, irq.CancellationToken);
-                _logger.LogInformation("Sending Invocation '{invocationId}' complete", invocationMessage.InvocationId);
+                _logger.SendInvocationCompleted(invocationMessage.InvocationId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(0, ex, "Sending Invocation '{invocationId}' failed", invocationMessage.InvocationId);
+                _logger.SendInvocationFailed(invocationMessage.InvocationId, ex);
                 irq.Fail(ex);
                 TryRemoveInvocation(invocationMessage.InvocationId, out _);
             }
@@ -216,11 +213,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                     switch (message)
                     {
                         case InvocationMessage invocation:
-                            if (_logger.IsEnabled(LogLevel.Trace))
-                            {
-                                var argsList = string.Join(", ", invocation.Arguments.Select(a => a.GetType().FullName));
-                                _logger.LogTrace("Received Invocation '{invocationId}': {methodName}({args})", invocation.InvocationId, invocation.Target, argsList);
-                            }
+                            _logger.ReceivedInvocation(invocation.InvocationId, invocation.Target, invocation.Arguments);
                             await DispatchInvocationAsync(invocation, _connectionActive.Token);
                             break;
                         case CompletionMessage completion:
