@@ -219,7 +219,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                         case CompletionMessage completion:
                             if (!TryRemoveInvocation(completion.InvocationId, out irq))
                             {
-                                _logger.LogWarning("Dropped unsolicited Completion message for invocation '{invocationId}'", completion.InvocationId);
+                                _logger.DropCompletionMessage(completion.InvocationId);
                                 return;
                             }
                             DispatchInvocationCompletion(completion, irq);
@@ -229,7 +229,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                             // Complete the invocation with an error, we don't support streaming (yet)
                             if (!TryGetInvocation(streamItem.InvocationId, out irq))
                             {
-                                _logger.LogWarning("Dropped unsolicited Stream Item message for invocation '{invocationId}'", streamItem.InvocationId);
+                                _logger.DropStreamMessage(streamItem.InvocationId);
                                 return;
                             }
                             DispatchInvocationStreamItemAsync(streamItem, irq);
@@ -243,10 +243,10 @@ namespace Microsoft.AspNetCore.SignalR.Client
 
         private Task Shutdown(Exception ex = null)
         {
-            _logger.LogTrace("Shutting down connection");
+            _logger.ShutdownConnection();
             if (ex != null)
             {
-                _logger.LogError(ex, "Connection is shutting down due to an error");
+                _logger.ShutdownWithError(ex);
             }
 
             lock (_pendingCallsLock)
@@ -258,7 +258,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
 
                 foreach (var outstandingCall in _pendingCalls.Values)
                 {
-                    _logger.LogTrace("Removing pending call {invocationId}", outstandingCall.InvocationId);
+                    _logger.RemoveInvocation(outstandingCall.InvocationId);
                     if (ex != null)
                     {
                         outstandingCall.Fail(ex);
@@ -275,7 +275,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
             // Find the handler
             if (!_handlers.TryGetValue(invocation.Target, out InvocationHandler handler))
             {
-                _logger.LogWarning("Failed to find handler for '{target}' method", invocation.Target);
+                _logger.MissingHandler(invocation.Target);
                 return Task.CompletedTask;
             }
 
@@ -288,25 +288,25 @@ namespace Microsoft.AspNetCore.SignalR.Client
         // and there's nobody to actually wait for us to finish.
         private async void DispatchInvocationStreamItemAsync(StreamItemMessage streamItem, InvocationRequest irq)
         {
-            _logger.LogTrace("Received StreamItem for Invocation #{invocationId}", streamItem.InvocationId);
+            _logger.ReceivedStreamItem(streamItem.InvocationId);
 
             if (irq.CancellationToken.IsCancellationRequested)
             {
-                _logger.LogTrace("Canceling dispatch of StreamItem message for Invocation {invocationId}. The invocation was cancelled.", irq.InvocationId);
+                _logger.CancelingStreamItem(irq.InvocationId);
             }
             else if (!await irq.StreamItem(streamItem.Item))
             {
-                _logger.LogWarning("Invocation {invocationId} received stream item after channel was closed.", irq.InvocationId);
+                _logger.ReceivedStreamItemAfterClose(irq.InvocationId);
             }
         }
 
         private void DispatchInvocationCompletion(CompletionMessage completion, InvocationRequest irq)
         {
-            _logger.LogTrace("Received Completion for Invocation #{invocationId}", completion.InvocationId);
+            _logger.ReceivedInvocationCompletion(completion.InvocationId);
 
             if (irq.CancellationToken.IsCancellationRequested)
             {
-                _logger.LogTrace("Cancelling dispatch of Completion message for Invocation {invocationId}. The invocation was cancelled.", irq.InvocationId);
+                _logger.CancelingCompletion(irq.InvocationId);
             }
             else
             {
@@ -325,7 +325,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
         {
             if (_connectionActive.Token.IsCancellationRequested)
             {
-                _logger.LogError("Invoke was called after the connection was terminated");
+                _logger.InvokeAfterTermination();
                 throw new InvalidOperationException("Connection has been terminated.");
             }
         }
@@ -339,7 +339,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                 ThrowIfConnectionTerminated();
                 if (_pendingCalls.ContainsKey(irq.InvocationId))
                 {
-                    _logger.LogCritical("Invocation ID '{invocationId}' is already in use.", irq.InvocationId);
+                    _logger.InvocationAlreadyInUse(irq.InvocationId);
                     throw new InvalidOperationException($"Invocation ID '{irq.InvocationId}' is already in use.");
                 }
                 else
@@ -388,7 +388,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
             {
                 if (!_connection._pendingCalls.TryGetValue(invocationId, out InvocationRequest irq))
                 {
-                    _connection._logger.LogError("Unsolicited response received for invocation '{invocationId}'", invocationId);
+                    _connection._logger.ReceivedUnexpectedResponse(invocationId);
                     return null;
                 }
                 return irq.ResultType;
@@ -398,7 +398,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
             {
                 if (!_connection._handlers.TryGetValue(methodName, out InvocationHandler handler))
                 {
-                    _connection._logger.LogWarning("Failed to find handler for '{target}' method", methodName);
+                    _connection._logger.MissingHandler(methodName);
                     return Type.EmptyTypes;
                 }
                 return handler.ParameterTypes;
