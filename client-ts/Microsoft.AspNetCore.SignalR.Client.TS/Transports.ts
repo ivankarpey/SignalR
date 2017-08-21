@@ -168,6 +168,12 @@ export class LongPollingTransport implements ITransport {
     connect(url: string, requestedTransferMode: TransferMode): Promise<TransferMode> {
         this.url = url;
         this.shouldPoll = true;
+
+        let actualTransferMode =
+            new XMLHttpRequest().hasOwnProperty("responseType")
+                ? requestedTransferMode
+                : TransferMode.Text;
+
         this.poll(this.url, requestedTransferMode);
         return Promise.resolve(requestedTransferMode);
     }
@@ -186,9 +192,14 @@ export class LongPollingTransport implements ITransport {
             if (pollXhr.status == 200) {
                 if (this.onDataReceived) {
                     try {
-                        if (pollXhr.response) {
-                            console.log(`(LongPolling transport) data received: ${pollXhr.response}`);
-                            this.onDataReceived(pollXhr.response);
+
+                        let response = transferMode === TransferMode.Text
+                            ? pollXhr.responseText
+                            : pollXhr.response;
+
+                        if (response) {
+                            console.log(`(LongPolling transport) data received: ${response}`);
+                            this.onDataReceived(response);
                         }
                         else {
                             console.log(`(LongPolling transport) timed out`);
