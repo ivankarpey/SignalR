@@ -6,20 +6,25 @@ import { IHubProtocol, ProtocolType, MessageType, HubMessage, CompletionMessage,
 import { JsonHubProtocol } from "./JsonHubProtocol";
 import { TextMessageFormat } from "./Formatters"
 import { Base64EncodedHubProtocol } from "./Base64EncodedHubProtocol"
+import { ILogger, LogLevel } from "./ILogger"
+import { NullLogger } from "./Loggers"
 
 export { TransportType } from "./Transports"
 export { HttpConnection } from "./HttpConnection"
 export { JsonHubProtocol } from "./JsonHubProtocol"
+export { LogLevel } from "./ILogger"
+export { ConsoleLogger } from "./Loggers"
 
 export class HubConnection {
-    private connection: IConnection;
+    private readonly connection: IConnection;
+    private readonly logger: ILogger;
+    private protocol: IHubProtocol;
     private callbacks: Map<string, (invocationUpdate: CompletionMessage | ResultMessage) => void>;
     private methods: Map<string, (...args: any[]) => void>;
     private id: number;
     private connectionClosedCallback: ConnectionClosed;
-    private protocol: IHubProtocol;
 
-    constructor(connection: IConnection, protocol: IHubProtocol = new JsonHubProtocol()) {
+    constructor(connection: IConnection, logger: ILogger = new NullLogger(), protocol: IHubProtocol = new JsonHubProtocol()) {
         this.connection = connection;
         this.protocol = protocol || new JsonHubProtocol();
         this.connection.onDataReceived = data => {
@@ -57,7 +62,7 @@ export class HubConnection {
                     }
                     break;
                 default:
-                    console.log("Invalid message type: " + data);
+                    this.logger.log(LogLevel.Warning, "Invalid message type: " + data);
                     break;
             }
         }
@@ -72,7 +77,7 @@ export class HubConnection {
             }
         }
         else {
-            console.log(`No client method with the name '${invocationMessage.target}' found.`);
+            this.logger.log(LogLevel.Warning, `No client method with the name '${invocationMessage.target}' found.`);
         }
     }
 
