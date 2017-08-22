@@ -95,7 +95,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                     : TransferMode.Text;
 
             transferModeFeature.TransferMode = requestedTransferMode;
-            await _connection.StartAsync();
+            await _connection.StartAsync().ForceAsync();
             var actualTransferMode = transferModeFeature.TransferMode;
 
             _protocolReaderWriter = new HubProtocolReaderWriter(_protocol, GetDataEncoder(requestedTransferMode, actualTransferMode));
@@ -103,7 +103,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
             using (var memoryStream = new MemoryStream())
             {
                 NegotiationProtocol.WriteMessage(new NegotiationMessage(_protocol.Name), memoryStream);
-                await _connection.SendAsync(memoryStream.ToArray(), _connectionActive.Token);
+                await _connection.SendAsync(memoryStream.ToArray(), _connectionActive.Token).ForceAsync();
             }
         }
 
@@ -123,7 +123,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
 
         public async Task DisposeAsync()
         {
-            await _connection.DisposeAsync();
+            await _connection.DisposeAsync().ForceAsync();
         }
 
         // TODO: Client return values/tasks?
@@ -195,7 +195,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
                 var payload = _protocolReaderWriter.WriteMessage(invocationMessage);
                 _logger.LogInformation("Sending Invocation '{invocationId}'", invocationMessage.InvocationId);
 
-                await _connection.SendAsync(payload, irq.CancellationToken);
+                await _connection.SendAsync(payload, irq.CancellationToken).ForceAsync();
                 _logger.LogInformation("Sending Invocation '{invocationId}' complete", invocationMessage.InvocationId);
             }
             catch (Exception ex)

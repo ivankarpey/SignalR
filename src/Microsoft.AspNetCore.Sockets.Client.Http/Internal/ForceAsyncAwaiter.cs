@@ -1,11 +1,13 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
-namespace System.Threading.Tasks
+namespace Microsoft.AspNetCore.Sockets
 {
-    internal static partial class TaskAwaiters
+    public static partial class TaskAwaiters
     {
         /// <summary>
         /// Returns an awaitable/awaiter that will ensure the continuation is executed
@@ -20,7 +22,7 @@ namespace System.Threading.Tasks
         }
     }
 
-    internal struct ForceAsyncAwaiter : ICriticalNotifyCompletion
+    public struct ForceAsyncAwaiter : ICriticalNotifyCompletion
     {
         private readonly Task _task;
 
